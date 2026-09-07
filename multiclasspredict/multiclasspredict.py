@@ -158,112 +158,109 @@ def ovo_and_ova_multiclass_auc(X, y, base_clf, p_grid, random_state, model_name)
     print(f"Macro MCC (OvR): {macro_ovr_mcc:.4f}")
     print(f"Macro PR AUC (OvR): {macro_ovr_pr_auc:.4f}")  '''
 
-    # avoiding  meaningless computation as OvO metrics won’t make sense with TabPFN
-    if model_name == "tabpfn":
-        print("Skipping One-vs-One metrics for TabPFN")
-    else:
+    
         
-        ####################
-        # One-vs-One Classification
-        ####################
-        print("Performing One vs One classification")
+    ####################
+    # One-vs-One Classification
+    ####################
+    print("Performing One vs One classification")
 
-        ovo_auc = {}
-        ovo_precision = {}
-        ovo_recall = {}
-        ovo_f1 = {}
-        ovo_mcc = {}
+    ovo_auc = {}
+    ovo_precision = {}
+    ovo_recall = {}
+    ovo_f1 = {}
+    ovo_mcc = {}
 
-        for c1, c2 in combinations(range(len(class_names)), 2): 
-            mask = np.isin(y_encoded, [c1, c2]) 
-            X_pair, y_pair = X[mask], y_encoded[mask] 
-    
-            # checking grid search enabled or not
-            if p_grid is not None:
-                ovo_clf = GridSearchCV(
-                    estimator=base_clf,
-                    param_grid={k.replace("estimator__", ""): v for k, v in p_grid.items()},
-                    cv=inner_cv,
-                    scoring="roc_auc"
-                )
-            else:
-                ovo_clf = base_clf
-                
-            y_score_pair = cross_val_predict(ovo_clf, X_pair, y_pair, cv=outer_cv, method="predict_proba") 
+    for c1, c2 in combinations(range(len(class_names)), 2): 
+        mask = np.isin(y_encoded, [c1, c2]) 
+        X_pair, y_pair = X[mask], y_encoded[mask] 
+
+        # checking grid search enabled or not
+        if p_grid is not None:
+            ovo_clf = GridSearchCV(
+                estimator=base_clf,
+                param_grid={k.replace("estimator__", ""): v for k, v in p_grid.items()},
+                cv=inner_cv,
+                scoring="roc_auc"
+            )
+        else:
+            ovo_clf = base_clf
             
-            # Identify minority 
+        y_score_pair = cross_val_predict(ovo_clf, X_pair, y_pair, cv=outer_cv, method="predict_proba") 
+        
+        # Identify minority 
+        
+        vals, counts = np.unique(y_pair, return_counts=True) 
+        minority = vals[np.argmin(counts)] 
+        minority_idx = np.where([c1, c2] == minority)[0][0] 
+        
+        y_bin = (y_pair == minority).astype(int) 
+        y_score_cls = y_score_pair[:, minority_idx] 
+        
+        
+        
+        # Ensure minority positive 
+        
+        if np.sum(y_bin) > np.sum(1 - y_bin): 
+            y_bin = 1 - y_bin 
+            y_score_cls = 1 - y_score_cls 
             
-            vals, counts = np.unique(y_pair, return_counts=True) 
-            minority = vals[np.argmin(counts)] 
-            minority_idx = np.where([c1, c2] == minority)[0][0] 
-            
-            y_bin = (y_pair == minority).astype(int) 
-            y_score_cls = y_score_pair[:, minority_idx] 
-            
-            
-            
-            # Ensure minority positive 
-            
-            if np.sum(y_bin) > np.sum(1 - y_bin): 
-                y_bin = 1 - y_bin 
-                y_score_cls = 1 - y_score_cls 
-                
-            y_pred_bin = (np.argmax(y_score_pair, axis=1) == minority_idx).astype(int)
-                                                                                 
-            precision, recall, f1, _ = precision_recall_fscore_support(y_bin, y_pred_bin, average="binary") 
-            mcc = matthews_corrcoef(y_bin, y_pred_bin) 
-            prec_curve, rec_curve, _ = precision_recall_curve(y_bin, y_score_cls) 
-            pr_auc_val = auc(rec_curve, prec_curve) 
-            roc_auc_val = roc_auc_score(y_bin, y_score_cls)
-            
-            pair_name = f"{le.inverse_transform([c1])[0]} vs {le.inverse_transform([c2])[0]}" 
-            
-            results[f"{pair_name} - Precision"] = precision 
-            results[f"{pair_name} - Recall"] = recall 
-            results[f"{pair_name} - F1"] = f1 
-            results[f"{pair_name} - MCC"] = mcc 
-            results[f"{pair_name} - PR AUC"] = pr_auc_val 
-            results[f"{pair_name} - ROC AUC"] = roc_auc_val 
-            
-            ovo_auc[(c1, c2)] = roc_auc_val 
-            ovo_precision[(c1, c2)] = precision 
-            ovo_recall[(c1, c2)] = recall 
-            ovo_f1[(c1, c2)] = f1 
-            ovo_mcc[(c1, c2)] = mcc 
-            
-            # for plotting 
-            plot_data.append({
-                "class_a": le.inverse_transform([c1])[0],
-                "class_b": le.inverse_transform([c2])[0],
-                "pair_name": pair_name,
-                "y_true": y_bin.copy(),
-                "y_prob": y_score_cls.copy(),
-                "roc_auc": roc_auc_val,
-                "pr_auc": pr_auc_val
-            })
-            
-        # Macro metrics OvO 
-        macro_ovo_auc = np.mean(list(ovo_auc.values()))
-        macro_ovo_precision = np.mean(list(ovo_precision.values()))
-        macro_ovo_recall = np.mean(list(ovo_recall.values())) 
-        macro_ovo_f1 = np.mean(list(ovo_f1.values())) 
-        macro_ovo_mcc = np.mean(list(ovo_mcc.values())) 
-        macro_ovo_pr_auc = np.mean([results[k] for k in results if "vs" in k and "PR AUC" in k]) 
-    
-        results["OvO Macro ROC AUC"] =  macro_ovo_auc
-        results["OvO Macro Precision"] = macro_ovo_precision
-        results["OvO Macro Recall"] = macro_ovo_recall
-        results["OvO Macro F1"] = macro_ovo_f1
-        results["OvO Macro MCC"] = macro_ovo_mcc
-        results["OvO Macro PR AUC"] =  macro_ovo_pr_auc
-    
-        ''' 
-        print(f"Macro ROC AUC (OvO): {macro_ovo_auc:.4f}")
-        print(f"Macro Precision (OvO): {macro_ovo_precision:.4f}")
-        print(f"Macro Recall (OvO): {macro_ovo_recall:.4f}")
-        print(f"Macro F1 (OvO): {macro_ovo_f1:.4f}")
-        print(f"Macro MCC (OvO): {macro_ovo_mcc:.4f}")
-        print(f"Macro PR AUC (OvO): {macro_ovo_pr_auc:.4f}") '''
+        y_pred_bin = (np.argmax(y_score_pair, axis=1) == minority_idx).astype(int)
+                                                                             
+        precision, recall, f1, _ = precision_recall_fscore_support(y_bin, y_pred_bin, average="binary") 
+        mcc = matthews_corrcoef(y_bin, y_pred_bin) 
+        prec_curve, rec_curve, _ = precision_recall_curve(y_bin, y_score_cls) 
+        pr_auc_val = auc(rec_curve, prec_curve) 
+        roc_auc_val = roc_auc_score(y_bin, y_score_cls)
+        
+        pair_name = f"{le.inverse_transform([c1])[0]} vs {le.inverse_transform([c2])[0]}" 
+        
+        results[f"{pair_name} - Precision"] = precision 
+        results[f"{pair_name} - Recall"] = recall 
+        results[f"{pair_name} - F1"] = f1 
+        results[f"{pair_name} - MCC"] = mcc 
+        results[f"{pair_name} - PR AUC"] = pr_auc_val 
+        results[f"{pair_name} - ROC AUC"] = roc_auc_val 
+        
+        ovo_auc[(c1, c2)] = roc_auc_val 
+        ovo_precision[(c1, c2)] = precision 
+        ovo_recall[(c1, c2)] = recall 
+        ovo_f1[(c1, c2)] = f1 
+        ovo_mcc[(c1, c2)] = mcc 
+        
+        # for plotting 
+        plot_data.append({
+            "class_a": le.inverse_transform([c1])[0],
+            "class_b": le.inverse_transform([c2])[0],
+            "pair_name": pair_name,
+            "y_true": y_bin.copy(),
+            "y_prob": y_score_cls.copy(),
+            "roc_auc": roc_auc_val,
+            "pr_auc": pr_auc_val
+        })
+        
+    # Macro metrics OvO 
+    macro_ovo_auc = np.mean(list(ovo_auc.values()))
+    macro_ovo_precision = np.mean(list(ovo_precision.values()))
+    macro_ovo_recall = np.mean(list(ovo_recall.values())) 
+    macro_ovo_f1 = np.mean(list(ovo_f1.values())) 
+    macro_ovo_mcc = np.mean(list(ovo_mcc.values())) 
+    macro_ovo_pr_auc = np.mean([results[k] for k in results if "vs" in k and "PR AUC" in k]) 
+
+    results["OvO Macro ROC AUC"] =  macro_ovo_auc
+    results["OvO Macro Precision"] = macro_ovo_precision
+    results["OvO Macro Recall"] = macro_ovo_recall
+    results["OvO Macro F1"] = macro_ovo_f1
+    results["OvO Macro MCC"] = macro_ovo_mcc
+    results["OvO Macro PR AUC"] =  macro_ovo_pr_auc
+
+    ''' 
+    print(f"Macro ROC AUC (OvO): {macro_ovo_auc:.4f}")
+    print(f"Macro Precision (OvO): {macro_ovo_precision:.4f}")
+    print(f"Macro Recall (OvO): {macro_ovo_recall:.4f}")
+    print(f"Macro F1 (OvO): {macro_ovo_f1:.4f}")
+    print(f"Macro MCC (OvO): {macro_ovo_mcc:.4f}")
+    print(f"Macro PR AUC (OvO): {macro_ovo_pr_auc:.4f}") '''
     
     return results, plot_data
 
