@@ -270,20 +270,7 @@ def repeat_clf(n_seeds, ks, X, y, label, model, sampling_strategy, use_grid=Fals
     print("features(ks): ", ks)
     print("seeds: ", n_seeds)
 
-    # Define sampling strategies
-    sampling_strategies = {
-        "No Sampling": None,
-        "Random OverSampling": RandomOverSampler(random_state=42),
-        "SMOTE": SMOTE(random_state=42),
-        "Random UnderSampling": RandomUnderSampler(random_state=42),
-        "NearMiss (v1)": NearMiss(version=1),
-        "NearMiss (v2)": NearMiss(version=2),
-        "NearMiss (v3)": NearMiss(version=3),
-    }
-
-    # If the selected strategy is not in the dictionary, use "No Sampling"
-    sampler = sampling_strategies.get(sampling_strategy, None)
-
+    
     seed_results = {}
 
     for seed in range(n_seeds):
@@ -292,6 +279,20 @@ def repeat_clf(n_seeds, ks, X, y, label, model, sampling_strategy, use_grid=Fals
         for k in ks:
 
             print(f"CV for seed {seed} and {k} features")
+            # Define sampling strategies
+            sampling_strategies = {
+                "No Sampling": None,
+                "Random OverSampling": RandomOverSampler(random_state=seed),
+                "SMOTE": SMOTE(random_state=seed),
+                "Random UnderSampling": RandomUnderSampler(random_state=seed),
+                "NearMiss (v1)": NearMiss(version=1),
+                "NearMiss (v2)": NearMiss(version=2),
+                "NearMiss (v3)": NearMiss(version=3),
+            }
+
+            # If the selected strategy is not in the dictionary, use "No Sampling"
+            sampler = sampling_strategies.get(sampling_strategy, None)
+
 
             # Create a Random Forest Classifier
             rf = RandomForestClassifier(random_state=seed)
@@ -406,7 +407,19 @@ def store_results(seed_results, output):
             grid_search = result_info.get("Grid_Search", False)
                         
             # Determine Class and Type
-           
+            groups = []
+
+            for key in result.keys():
+                if "Macro" in key:
+                    group = ("Macro", "OvR" if "OvR" in key else "OvO")
+                elif "vs Rest" in key:
+                    group = (key.split(" vs Rest")[0], "OvR")
+                else:
+                    group = (key.split(" - ")[0], "OvO")
+
+                if group not in groups:
+                    groups.append(group)
+            '''
             groups = set()
             for key in result.keys():
                 if "Macro" in key:
@@ -414,7 +427,7 @@ def store_results(seed_results, output):
                 elif "vs Rest" in key:
                     groups.add((key.split(" vs Rest")[0], "OvR"))
                 else:
-                    groups.add((key.split(" - ")[0], "OvO"))
+                    groups.add((key.split(" - ")[0], "OvO"))'''
 
             # assign metric values according to class and type
             for class_name, type_name in groups:
@@ -908,11 +921,14 @@ def plot_model_performance_by_features(result_file, plot_per_feature):
                 ax.set_ylim(0, 1)
                 ax.tick_params(axis="x", rotation=30)
 
-                ax.legend(
-                    title="Metric",
-                    bbox_to_anchor=(1.02, 1),
-                    loc="upper left"
-                )
+                if row == 0 and col == 0:
+                        ax.legend(
+                            title="Metric",
+                            bbox_to_anchor=(1.02, 1),
+                            loc="upper left"
+                        )
+                else:
+                        ax.get_legend().remove()
 
                 # Value labels
                 for container in ax.containers:

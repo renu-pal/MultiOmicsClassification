@@ -13,8 +13,10 @@ The tool requires following inputs :
     - Multiple Omics datasets can be added as input.
     - Each file includes a header row containing the feature names.
     - The first column must contain unique sample IDs.
+    - Feature names may differ between omics datasets.
     - Sample IDs must be consistent across the feature matrix/matrices and the target file.
     - For fair comparison between different omics datasets, the feature matrices should contain the same number of samples, ideally with the same sample IDs. If the datasets contain different numbers of samples, performance comparisons may be affected by differences in sample size.
+    
 
 - **Omics Type**
     - Select the omics type corresponding to each feature matrix (for example, RNA-seq, DNA methylation, proteomics, or other omics data).
@@ -25,7 +27,8 @@ The tool requires following inputs :
     - Enable this option to combines multiple omics feature matrices into a single feature matrix.
     - Samples are aligned using their sample IDs.
     - Only samples common to all provided omics datasets are retained.
-    - Features from the different omics datasets are concatenated column-wise.
+    - Features from the different omics datasets are concatenated column-wise, representing vertical integration, before being passed to the model, corresponding to early integration.
+
 
     
 - **Y: Target file (required)**
@@ -33,16 +36,12 @@ The tool requires following inputs :
     - The first column must contain the sample IDs.
     - The sample IDs must match those in the feature matrix.
     - Must contain the target column specified by the user (e.g. "target" or "Sample_Condition").
-    - The target column contains the class labels used for
-      multiclass classification.
+    - The target column contains the class labels used for multiclass classification.
       
      Note:
-      The feature matrix and target file do not need to contain
-      exactly the same samples. Only samples present in both the
-      feature matrix and target file are used.
+      The feature matrix and target file do not need to contain exactly the same samples. Only samples present in both the feature matrix and target file are used.
 
-      When multiple omics datasets are combined, only samples
-      present in all omics datasets and in the target file are used.
+      When multiple omics datasets are combined, only samples present in all omics datasets and in the target file are used.
 
 - **Target Column**
     - Specify the column in the target file Y that contains the class labels to be predicted.
@@ -70,15 +69,61 @@ The tool requires following inputs :
     - NearMiss (v3)
 
 - **Grid Search (optional)**
-    - Default : No
-    - Enables hyperparameter optimization
-    - Can substantially increase runtime
+    - Default: No
+    - Enables hyperparameter optimization using grid search.
+    - The following hyperparameters are evaluated for each model:
+
+        - Random Forest (rf):
+            - n_estimators: 100, 300, 500
+                - Number of trees in the forest. Increasing this can improve model stability but increases runtime.
+            - max_depth: None, 10, 20, 30
+                - Maximum depth of each decision tree. Larger values allow more complex trees and may increase the risk of overfitting.
+            - max_features: sqrt, log2
+                - Number of features considered when splitting a node. Controls the diversity of the trees.
+            - criterion: entropy 
+                - Function used to measure the quality of a split. Entropy measures the impurity of the resulting classes.
+            - min_samples_leaf: 1, 2, 4
+                - Minimum number of samples required in a leaf node. Larger values produce simpler trees and can reduce overfitting.
+
+        - XGBoost (xgb):
+            - n_estimators: 100, 300, 500
+                - Number of boosting trees.
+            - gamma: 0, 0.1, 0.3
+                - Minimum loss reduction required to make a further split. Larger values make the model more conservative.
+            - max_depth: 3, 5, 7
+                - Maximum depth of each tree.
+            - learning_rate: 0.01, 0.05, 0.1
+                - Step size used when updating the model during boosting. Smaller values require more trees but can provide more gradual learning.
+
+        - Extra Trees (etc):
+            - n_estimators: 100, 300, 500
+                - Number of trees in the ensemble. Increasing this can improve stability but increases runtime.
+            - max_depth: None, 10, 20
+                - Maximum depth of each tree. 
+            - max_features: sqrt, log2
+                - Number of features considered when splitting a node. 
+            - min_samples_leaf: 1, 2, 4
+                - Minimum number of samples required in a leaf node. 
+
+        - LightGBM (lgbm):
+            - n_estimators: 100, 300, 500
+                - Number of boosting trees. 
+            - learning_rate: 0.01, 0.05, 0.1
+                - Step size used during boosting. Smaller values result in more gradual learning.
+            - num_leaves: 31, 63, 127
+                - Maximum number of leaves per tree. 
+
+        - TabPFN (tabpfn):
+            - Grid Search is not currently applied to TabPFN to avoid substantially increasing runtime.
+
+    - Grid Search evaluates combinations of the specified hyperparameter values and selects the configuration according to the model's cross-validation performance.
+    - Can substantially increase runtime because multiple hyperparameter combinations are evaluated.
 
 Output
 ======
 The tool creates following output files :
 
-- **MultiClass Metric score**
+- **MultiClass classification Results**
     - This is the main output file depicting different classification metric scores.
     - For each seed, feature count (k), class (or class pair), and evaluation type (OvR/OvO), it reports:
         - ROC AUC – class separation ability
@@ -87,8 +132,8 @@ The tool creates following output files :
         - Recall
         - F1 Score
         - MCC (balanced classification metric)
-    - It also includes Macro averages across all classes.
-
+    - Also reports Macro scores for OvR and OvO, calculated by averaging the corresponding class or class-pair results.
+    
 - **Diagnostic Plots**
     - A PNG file showing pairwise class comparisons.
     - For every class pair, it contains:
