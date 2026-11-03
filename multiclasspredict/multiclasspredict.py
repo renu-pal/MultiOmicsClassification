@@ -109,13 +109,14 @@ def ovo_and_ova_multiclass_auc(X, y, base_clf, p_grid, random_state, model_name)
     for idx, cls in enumerate(class_names):
         y_bin = (y_encoded == idx).astype(int)
         cls_score = y_score[:, idx]
+        y_pred_bin = (y_pred == idx).astype(int)
 
         # Ensure minority class is positive
         if np.sum(y_bin) > np.sum(1 - y_bin):
             y_bin = 1 - y_bin
             cls_score = 1 - cls_score
-
-        y_pred_bin = (y_pred == idx).astype(int)
+            y_pred_bin = 1-y_pred_bin
+            
         precision, recall, f1, _ = precision_recall_fscore_support(y_bin, y_pred_bin, average="binary")
         mcc = matthews_corrcoef(y_bin, y_pred_bin)
         prec_curve, rec_curve, _ = precision_recall_curve(y_bin, cls_score)
@@ -547,8 +548,7 @@ def plot_pairwise_diagnostics(seed_results, diagnostic_plot):
         final_plot_data.append(item)
 
     n_pairs = len(final_plot_data)
-
-    fig, axes = plt.subplots(n_pairs, 3, figsize = (18, 4*n_pairs))
+    fig, axes = plt.subplots(n_pairs, 3, figsize=(24, 6*n_pairs))
 
     if n_pairs == 1:
         axes = np.array([axes])
@@ -620,6 +620,7 @@ def plot_pairwise_diagnostics(seed_results, diagnostic_plot):
             ],
             bins=20,
             alpha=0.7,
+            rwidth=1.0,
             label=[
                 f"Negative ({class_a})",
                 f"Positive ({class_b})"
@@ -627,6 +628,8 @@ def plot_pairwise_diagnostics(seed_results, diagnostic_plot):
         )
 
         ax_hist.set_title(f"{class_a} vs {class_b}\nPredicted Probabilities")
+        ax_hist.set_ylim(0, 55)
+        ax_hist.set_xlim(0, 1)
         ax_hist.set_xlabel("Predicted Probability")
         ax_hist.set_ylabel("Count")
         ax_hist.legend()
@@ -966,10 +969,10 @@ def plot_model_performance_by_features(result_file, plot_per_feature):
     
 def main():
     parser = argparse.ArgumentParser(description="Run Classification Model")
-    parser.add_argument("--X", action="append", required=True, help="Path to an omics feature matrix. Can be provided multiple times.")
+    parser.add_argument("--feature_matrix", action="append", required=True, help="Path to an omics feature matrix. Can be provided multiple times.")
     parser.add_argument("--omics_type", action="append", required=True, help="Name of the corresponding omics layer.")
     parser.add_argument("--combine_omics", action="store_true", help="Combine all provided omics feature matrices.")    
-    parser.add_argument("--y", type=str, required=True, help="path to y")
+    parser.add_argument("--target_file", type=str, required=True, help="path to y")
     parser.add_argument("--target_column", type=str, required=True, help="target column in the target file y.")
     parser.add_argument("--ks", type=str, required=True, help="list of values of k")
     parser.add_argument("--n_seeds", type=int, default=2, help="number of seeds")
@@ -984,15 +987,14 @@ def main():
     # reading str file paths
     omics_data = []
 
-    for X_file, assay in zip(args.X, args.omics_type):
+    for X_file, assay in zip(args.feature_matrix, args.omics_type):
         X = pd.read_csv(X_file, sep="\t", index_col=0)   
         # keep only numeric columns for sampling strategies
         X = X.select_dtypes(include=[np.number])
         omics_data.append((assay, X))
         
-    #X = pd.read_csv(args.X, sep="\t")
     # reading target file 
-    y = pd.read_csv(args.y, sep="\t", index_col=0 )
+    y = pd.read_csv(args.target_file, sep="\t", index_col=0 )
  
     # target column from the target file
     y = y[args.target_column]
