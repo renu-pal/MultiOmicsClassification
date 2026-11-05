@@ -1,13 +1,13 @@
 Multi Omics Classification 
 ===========================
 
-A Machine Learning Framework for Benchmarking, Feature Selection, and Hyperparameter Optimization of Machine Learning Models for Multiomics Data.
+The machine learning framework is designed for small, high-dimensional biological datasets, where limited sample sizes and class imbalance can increase the risk of overfitting and unstable performance estimates. To address these challenges, the framework combines feature selection, multiple sampling strategies, repeated nested stratified cross-validation, and grid-search-based hyperparameter optimization. Model performance is evaluated using complementary metrics, including ROC AUC, PR AUC, F1-score, and MCC, while both OvR and OvO multiclass strategies are assessed. This framework can be applied consistently to individual and integrated multi-omics datasets to enable systematic comparison of model performance.
 
 Input
 ======
 The tool requires following inputs :
 
-- **X: Feature matrix file(s) (required)**
+- **Feature matrix file(s) (required)**
     - Tab-separated file.
     - Samples are represented as rows and features as columns.
     - Multiple Omics datasets can be added as input.
@@ -31,7 +31,7 @@ The tool requires following inputs :
 
 
     
-- **Y: Target file (required)**
+- **Target file (required)**
     - Tab-separated file.
     - The first column must contain the sample IDs.
     - The sample IDs must match those in the feature matrix.
@@ -44,13 +44,14 @@ The tool requires following inputs :
       When multiple omics datasets are combined, only samples present in all omics datasets and in the target file are used.
 
 - **Target Column**
-    - Specify the column in the target file Y that contains the class labels to be predicted.
+    - Specify the column in the target file that contains the class labels to be predicted.
 
 - **Feature counts (k) (required)**
-    - Comma-separated list of numbers specifying how many top features to evaluate (e.g., 10,50,100).
+    - Comma-separated list of numbers specifying how many top features to evaluate (e.g., 10,50,100). Feature selection is performed using the embedded feature selection method 'SelectFromModel' with a Random Forest estimator. The maximum number of retained features k is predefined by user for each experiment. Features are ranked according to their Random Forest importance scores, and the top k most important features are selected for subsequent classifier evaluation.
 
 - **Number of seeds (n) (default = 2)**
-    - Number of random seeds used to repeat the classification.
+    - Number of random seeds allowing reproducibility of classification results. Seeds start at 0 and range up to n - 1.
+
 
 - **Model type (required)**
     - rf (RandomForest)
